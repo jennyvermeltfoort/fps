@@ -26,6 +26,8 @@ const float field_depth = 16.0;
 struct player_t player = {
     0.0f, 0.0f, 0.0f,
 };
+      player.pos_x = 8.0f;
+      player.pos_y = 8.0f;
 
 void screen_clear(void) { cout << "\033[2J" << flush; }
 void screen_set_cursor(unsigned int y, unsigned int x) {
@@ -43,6 +45,48 @@ void screen_print(WINDOW *win,char * screen) {
         waddch(win, *screen++);
     }
     wrefresh(win);
+}
+
+struct ray_t {
+    float distance;
+    float cell_x;
+    float cell_y;
+};
+
+void screen_insert(char * screen, ray_t * rays, int width) {
+    for(int i = 0 ; i < width ; i++) {
+        float distance = rays[i].distance;
+        int ceiling = (float)screen_size_height / 2.0 - screen_size_height / distance;
+        int floor = screen_size_height - ceiling;
+
+        short shade_wall = ' ';
+        if (distance <= field_depth / 4.0) {
+            shade_wall = '$';
+        } else if (distance < field_depth / 3.0) {
+            shade_wall = '%';
+        } else if (distance < field_depth / 2.0) {
+            shade_wall = '@';
+        } else if (distance < field_depth) {
+            shade_wall = '#';
+        }
+           
+        for (int y = 0; y < screen_size_height ; y++) {
+            if ( y >= ceiling && y <= floor) {
+                screen[i + y * screen_size_width] = shade_wall;
+            } else {
+                char shade_floor = ' ';
+                float b = 1.0 - ((float) y - screen_size_height / 2.0) / ((float) screen_size_height / 2.0);
+                if (b < 0.25) {
+                    shade_floor = '+';
+                } else if (b < 0.75) {
+                    shade_floor = '-';
+                } else if (b < 0.9) {
+                    shade_floor = '.';
+                }
+                screen[i + y * screen_size_width] = shade_floor;
+            } 
+        }
+    }
 }
 
 int main(void) {
@@ -99,74 +143,36 @@ int main(void) {
         } else if (ch == KEY_UP) {
             float val_x = player.pos_x + sinf(player.angle) * 5.0 * elapsed_time;
             float val_y = player.pos_y + cosf(player.angle) * 5.0 * elapsed_time;
-
             if (map[(int)val_x + (int)val_y * map_size_height] != '#') {
             player.pos_x = val_x;
             player.pos_y = val_y;
             }
-
         } else if (ch == KEY_DOWN) {
             float val_x = player.pos_x - sinf(player.angle) * 5.0 * elapsed_time;
             float val_y = player.pos_y - cosf(player.angle) * 5.0 * elapsed_time;
-
             if (map[(int)val_x + (int)val_y * map_size_height] != '#') {
             player.pos_x = val_x;
             player.pos_y = val_y;
             }
         }
 
-
+        struct ray_t rays[screen_size_width] = {};
         for (int x = 0; x < screen_size_width; x++) {
             float field_ray_angle = (player.angle - field_of_view / 2.0) + ((float)x / (float)screen_size_width) *
             field_of_view;
 
-            float distance = 0;
-
             float eye_x = sinf(field_ray_angle);
             float eye_y = cosf(field_ray_angle);
 
-            int cell_x = 0;
-            int cell_y = 0;
-
             do {
-                distance += 0.1f;
-                cell_x = (float)player.pos_x + eye_x * distance;
-                cell_y = (float)player.pos_y + eye_y * distance;
-            } while(map[cell_x  + cell_y  * map_size_width] != '#' && distance < field_depth );
-
-            int ceiling = (float)screen_size_height / 2.0 - screen_size_height / distance;
-            int floor = screen_size_height - ceiling;
-
-            short shade_wall = ' ';
-            if (distance <= field_depth / 4.0) {
-                shade_wall = '$';
-            } else if (distance < field_depth / 3.0) {
-                shade_wall = '%';
-            } else if (distance < field_depth / 2.0) {
-                shade_wall = '@';
-            } else if (distance < field_depth) {
-                shade_wall = '#';
-            }
-               
-            for (int y = 0; y < screen_size_height ; y++) {
-                if ( y >= ceiling && y <= floor) {
-                    screen[x + y * screen_size_width] = shade_wall;
-                } else {
-                    char shade_floor = ' ';
-                    float b = 1.0 - ((float) y - screen_size_height / 2.0) / ((float) screen_size_height / 2.0);
-                    if (b < 0.25) {
-                        shade_floor = '+';
-                    } else if (b < 0.75) {
-                        shade_floor = '-';
-                    } else if (b < 0.9) {
-                        shade_floor = '.';
-                    }
-                    screen[x + y * screen_size_width] = shade_floor;
-                } 
-            }
+                rays[x].distance += 0.1f;
+                rays[x].cell_x = (float)player.pos_x + eye_x * rays[x].distance;
+                rays[x].cell_y = (float)player.pos_y + eye_y * rays[x].distance;
+            } while(map[(int)rays[x].cell_x + (int)rays[x].cell_y  * map_size_width] != '#' && rays[x].distance < field_depth );
                 
         }
-
+        
+        screen_insert(screen, rays, screen_size_width);
         screen_print(win, screen);
     }
 
